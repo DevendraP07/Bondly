@@ -78,7 +78,7 @@ export function AppNavbar({
 
 	async function handleLogout() {
 		await authClient.signOut();
-		router.push("/login");
+		router.push("/");
 	}
 
 	const profileHref = "/Seeker/profile";
