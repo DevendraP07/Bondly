@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
@@ -100,6 +100,7 @@ export const matchRouter = createTRPCRouter({
 				.optional(),
 		)
 		.query(async ({ ctx, input }) => {
+			// Build set of already-interacted IDs to exclude
 			const interacted = await ctx.db.query.match.findMany({
 				columns: { receiverId: true, senderId: true },
 				where: or(
@@ -115,6 +116,8 @@ export const matchRouter = createTRPCRouter({
 				interactedIds.add(m.receiverId);
 			}
 
+			// FIX 1: fetch ALL non-admin, non-deleted users
+			// This includes both role="seeker" AND role="premium"
 			const allUsers = await ctx.db.query.user.findMany({
 				columns: {
 					bio: true,
@@ -130,17 +133,20 @@ export const matchRouter = createTRPCRouter({
 					name: true,
 					photos: true,
 				},
-				where: eq(user.role, "seeker"),
+				where: and(ne(user.role, "admin"), isNull(user.deletedAt)),
 			});
 
+			// Exclude self, interacted users, and blocked users
 			let result = allUsers.filter(
 				(u) => !interactedIds.has(u.id) && !u.isBlocked,
 			);
 
+			// FIX 2: gender filter is FREE for all users — not premium-only
 			if (input?.gender) {
 				result = result.filter((u) => u.gender === input.gender);
 			}
 
+			// Age filter — premium-only restriction is enforced on the frontend
 			if (input?.minAge !== undefined || input?.maxAge !== undefined) {
 				const now = new Date();
 				result = result.filter((u) => {
@@ -155,7 +161,7 @@ export const matchRouter = createTRPCRouter({
 				});
 			}
 
-			// Boosted profiles first
+			// Boosted profiles appear first
 			result.sort((a, b) => {
 				if (a.isBoostActive && !b.isBoostActive) return -1;
 				if (!a.isBoostActive && b.isBoostActive) return 1;
@@ -227,7 +233,6 @@ export const matchRouter = createTRPCRouter({
 			});
 
 			if (input.action !== "dislike") {
-				// Check mutual like → auto-accept
 				const reverse = await ctx.db.query.match.findFirst({
 					where: and(
 						eq(match.receiverId, ctx.session.user.id),

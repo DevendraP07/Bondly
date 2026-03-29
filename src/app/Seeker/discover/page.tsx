@@ -39,7 +39,7 @@ export default function DiscoverPage() {
 	} = api.match.discover.useQuery(applied);
 
 	const sendAction = api.match.sendAction.useMutation({
-		onError: (err: { message: string }) => toast.error(err.message),
+		onError: (e) => toast.error(e.message),
 		onSuccess: (data) => {
 			if (data.matched) toast.success("It's a match! 💕");
 			setCurrent((p) => p + 1);
@@ -58,8 +58,9 @@ export default function DiscoverPage() {
 	const firstPhoto = photos[0];
 
 	function applyFilters() {
-		if (!isPremium && (filters.gender || filters.minAge || filters.maxAge)) {
-			toast.error("Advanced filters require Premium");
+		// FIX: gender is FREE for all users — only age filters are premium
+		if (!isPremium && (filters.minAge || filters.maxAge)) {
+			toast.error("Age filters require Premium");
 			return;
 		}
 		setApplied({
@@ -98,21 +99,19 @@ export default function DiscoverPage() {
 
 			{/* FILTERS */}
 			<div className="rounded-2xl border border-rose-100 bg-white p-5">
+				<p className="mb-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">
+					Filter Profiles
+				</p>
 				<div className="flex flex-wrap items-end gap-3">
+					{/* GENDER — FREE for all users */}
 					<div className="space-y-1.5">
-						<Label className="text-gray-500 text-xs">
-							Gender
-							{!isPremium && (
-								<span className="ml-1 text-rose-400">(Premium)</span>
-							)}
-						</Label>
+						<Label className="text-gray-500 text-xs">Gender</Label>
 						<Select
-							disabled={!isPremium}
 							onValueChange={(v) => setFilters((p) => ({ ...p, gender: v }))}
 							value={filters.gender}
 						>
-							<SelectTrigger className="h-9 w-36 border-rose-100">
-								<SelectValue placeholder="Any" />
+							<SelectTrigger className="h-9 w-40 border-rose-100">
+								<SelectValue placeholder="Any gender" />
 							</SelectTrigger>
 							<SelectContent>
 								<SelectItem value="male">Male</SelectItem>
@@ -122,6 +121,8 @@ export default function DiscoverPage() {
 							</SelectContent>
 						</Select>
 					</div>
+
+					{/* AGE — Premium only */}
 					<div className="space-y-1.5">
 						<Label className="text-gray-500 text-xs">
 							Min Age
@@ -158,6 +159,7 @@ export default function DiscoverPage() {
 							value={filters.maxAge}
 						/>
 					</div>
+
 					<Button
 						className="h-9 border-rose-200 text-rose-600 hover:bg-rose-50"
 						onClick={applyFilters}
@@ -166,7 +168,33 @@ export default function DiscoverPage() {
 					>
 						Apply Filters
 					</Button>
+
+					{/* Clear filters */}
+					{(applied.gender ?? applied.minAge ?? applied.maxAge) && (
+						<Button
+							className="h-9 border-gray-200 text-gray-500 hover:bg-gray-50"
+							onClick={() => {
+								setFilters({ gender: "", maxAge: "", minAge: "" });
+								setApplied({});
+								setCurrent(0);
+							}}
+							size="sm"
+							variant="outline"
+						>
+							Clear
+						</Button>
+					)}
 				</div>
+
+				{/* Active filter indicator */}
+				{applied.gender && (
+					<p className="mt-3 font-medium text-rose-600 text-xs">
+						Showing: <span className="capitalize">{applied.gender}</span>{" "}
+						profiles
+						{applied.minAge &&
+							` · Ages ${applied.minAge}${applied.maxAge ? `–${applied.maxAge}` : "+"}`}
+					</p>
+				)}
 			</div>
 
 			{/* PROFILE CARD */}
@@ -177,8 +205,24 @@ export default function DiscoverPage() {
 					<p className="mb-4 text-5xl">💕</p>
 					<p className="font-bold text-gray-900 text-lg">No more profiles</p>
 					<p className="mt-1 text-gray-500 text-sm">
-						Check back later for new people
+						{applied.gender
+							? `No ${applied.gender} profiles found. Try clearing the filter.`
+							: "Check back later for new people"}
 					</p>
+					{applied.gender && (
+						<Button
+							className="mt-4 border-rose-200 text-rose-600 hover:bg-rose-50"
+							onClick={() => {
+								setFilters({ gender: "", maxAge: "", minAge: "" });
+								setApplied({});
+								setCurrent(0);
+							}}
+							size="sm"
+							variant="outline"
+						>
+							Clear Filters
+						</Button>
+					)}
 				</div>
 			) : (
 				<div className="mx-auto max-w-sm">
@@ -188,7 +232,7 @@ export default function DiscoverPage() {
 							{firstPhoto ? (
 								<Image
 									alt={currentProfile.name}
-									className="h-full w-full object-cover"
+									className="object-cover"
 									fill
 									src={firstPhoto}
 									unoptimized
